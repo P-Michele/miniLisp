@@ -137,6 +137,109 @@ lval* lval_read_num(mpc_ast_t* t) {
     }
 }
 
+
+/*
+    Helper function to convert lval to double
+*/
+double lval_to_double(lval* v) {
+    return (v->type == LVAL_FLOAT) ? v->d : (double)v->l;
+}
+
+/*
+    Addition operation
+*/
+lval* lval_add(lval* x, lval* y) {
+    if (x->type == LVAL_FLOAT || y->type == LVAL_FLOAT) {
+        double xv = lval_to_double(x);
+        double yv = lval_to_double(y);
+        free(x);
+        free(y);
+        return lval_float(xv + yv);
+    } else {
+        x->l += y->l;
+        free(y);
+        return x;
+    }
+}
+
+/*
+    Subtraction operation
+*/
+lval* lval_sub(lval* x, lval* y) {
+    if (x->type == LVAL_FLOAT || y->type == LVAL_FLOAT) {
+        double xv = lval_to_double(x);
+        double yv = lval_to_double(y);
+        free(x);
+        free(y);
+        return lval_float(xv - yv);
+    } else {
+        x->l -= y->l;
+        free(y);
+        return x;
+    }
+}
+
+/*
+    Multiplication operation
+*/
+lval* lval_mul(lval* x, lval* y) {
+    if (x->type == LVAL_FLOAT || y->type == LVAL_FLOAT) {
+        double xv = lval_to_double(x);
+        double yv = lval_to_double(y);
+        free(x);
+        free(y);
+        return lval_float(xv * yv);
+    } else {
+        x->l *= y->l;
+        free(y);
+        return x;
+    }
+}
+
+/*
+    Division operation with zero check
+*/
+lval* lval_div(lval* x, lval* y) {
+    if ((y->type == LVAL_INT && y->l == 0) || 
+        (y->type == LVAL_FLOAT && fabs(y->d) < 1e-10)) {
+        free(x);
+        free(y);
+        return lval_err("Division by zero");
+    }
+    
+    double xv = lval_to_double(x);
+    double yv = lval_to_double(y);
+    free(x);
+    free(y);
+    return lval_float(xv / yv);
+}
+
+/*
+    Evaluate operation based on operator
+*/
+lval* lval_eval_op(lval* x, char* op, lval* y) {
+
+    if(x->err != NULL) { free(y); return x;}
+    if(y->err != NULL) { free(x); return y;}
+
+    if (strcmp(op, "+") == 0) {
+        return lval_add(x, y);
+    }
+    if (strcmp(op, "-") == 0) {
+        return lval_sub(x, y);
+    }
+    if (strcmp(op, "*") == 0) {
+        return lval_mul(x, y);
+    }
+    if (strcmp(op, "/") == 0) {
+        return lval_div(x, y);
+    }
+
+    free(x);
+    free(y);
+    return lval_err("Unknown operator");
+}
+
 /*
     This function will evaluate the AST and return an lval
 */
@@ -154,7 +257,8 @@ lval* lval_eval(mpc_ast_t* t) {
 
     //Iterate over the remaining expressions
     int i = 3;
-    while (strstr(t->children[i]->tag, "expr")) {
+    //A number is always an expression
+    while (i < t->children_num && strstr(t->children[i]->tag, "expr")) {
         lval* y = lval_eval(t->children[i]);
         x = lval_eval_op(x, op, y);
         i++;
@@ -163,99 +267,50 @@ lval* lval_eval(mpc_ast_t* t) {
     return x;
 }
 
-lval* lval_eval_op(lval* x, char* op, lval* y) {
-    // Addition
-    if (strcmp(op, "+") == 0) {
-        if (x->type == LVAL_FLOAT || y->type == LVAL_FLOAT) {
-            double xv = (x->type == LVAL_FLOAT) ? x->d : (double)x->l;
-            double yv = (y->type == LVAL_FLOAT) ? y->d : (double)y->l;
-            free(x);
-            free(y);
-            return lval_float(xv + yv);
-        } else {
-            x->l += y->l;
-            free(y);
-            return x;
-        }
+void lval_print(lval* val){
+    if (val->type == LVAL_INT) {
+        printf("%li", val->l);
+    } else if (val->type == LVAL_FLOAT) {
+        printf("%lf", val->d);
+    } else if (val->type == LVAL_ERR) {
+        printf("Error: %s", val->err);
     }
-    // Subtraction
-    if (strcmp(op, "-") == 0) {
-        if (x->type == LVAL_FLOAT || y->type == LVAL_FLOAT)
-        {
-            double xv = (x->type == LVAL_FLOAT) ? x->d : (double)x->l;
-            double yv = (y->type == LVAL_FLOAT) ? y->d : (double)y->l;
-            free(x);
-            free(y);
-            return lval_float(xv - yv);
-        }
-        else {
-            x->l -= y->l;
-            free(y);
-            return x;
-        }
-    }
-    // Multiplication
-    if (strcmp(op, "*") == 0) {
-        if (x->type == LVAL_FLOAT || y->type == LVAL_FLOAT)
-        {
-            double xv = (x->type == LVAL_FLOAT) ? x->d : (double)x->l;
-            double yv = (y->type == LVAL_FLOAT) ? y->d : (double)y->l;
-            free(x);
-            free(y);
-            return lval_float(xv * yv);
-        }
-        else {
-            x->l *= y->l;
-            free(y);
-            return x;
-        }
-    }
-    // Division
-    if (strcmp(op, "/") == 0) {
-        //Check for division by zero
-        if(y->type == LVAL_INT && y->d != 0){
-            if(y->type == LVAL_FLOAT && fabs(y->d) > 10e-7){
+}
 
-                double xv = (x->type == LVAL_FLOAT) ? x->d : (double)x->l;
-                double yv = (y->type == LVAL_FLOAT) ? y->d : (double)y->l;
-                free(x);
-                free(y);
-                return lval_float(xv / yv);
-            }
-        }
-        return lval_err("0 Division");
+void lval_delete(lval* val){
+    if (val->type == LVAL_ERR) {
+        free(val->err);
     }
-
-    free(x);
-    free(y);
-    return lval_err("Unknown operator");
+    free(val);
 }
 
 int main(void) {
     puts("MiniLisp version 0.0.1");
     parserSetup();
 
+        while(1) {
+            char* input = readline("miniLisp> \n");
+            add_history(input);
 
-        char* input = readline("miniLisp> ");
-        add_history(input);
+            //Start parsing
+            mpc_result_t result;
+            if (mpc_parse("<stdin>", input, miniLisp, &result)) {
+                mpc_ast_t* tree = result.output;
+                //Evaluate the AST
+                lval* result_val = lval_eval(tree);
+                //Print the result
+                lval_print(result_val);
+                lval_delete(result_val);
 
-        //Start parsing
-        mpc_result_t result;
-        if (mpc_parse("<stdin>", input, miniLisp, &result)) {
-            mpc_ast_t* tree = result.output;
-            mpc_ast_print(result.output);   // parsing ok
+                mpc_ast_delete(result.output);
+            } else {
+                mpc_err_print(result.error);    // parsing failed
+                mpc_err_delete(result.error);
+            }
 
-            printf("tag: %s\n", tree->tag);
-            printf("contents: %s\n", tree->contents);
-            printf("children_num: %i\n", tree->children_num);
-
-            mpc_ast_delete(result.output);
-        } else {
-            mpc_err_print(result.error);    // parsing failed
-            mpc_err_delete(result.error);
+            free(input);
         }
-
+        
     mpc_cleanup(4, Number, Operator, Expr, miniLisp);
-    free(input);
     return 0;
 }
